@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "generative-citylearn-agents"
+version = "0.1.0"
+description = "Generative LLM Agents for CityLearn Building & Energy-Community Simulation, modeled after Generative-Traffic-Agents (GTA)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Mark Colley"}
+]
+dependencies = [
+    "citylearn>=2.3.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+llm = [
+    "torch>=2.1.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.27.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+citylearn-simulacra = "generative_citylearn_agents.energy_simulacra:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
