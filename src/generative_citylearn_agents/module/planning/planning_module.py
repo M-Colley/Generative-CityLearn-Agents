@@ -138,6 +138,7 @@ class PlanningModule:
         observations: Mapping[str, float],
         action_specs: Sequence[Mapping[str, Any]],
         recent_decisions: Optional[Sequence[StepDecisionRecord]] = None,
+        telemetry_diagnostics: Optional[Mapping[str, Any]] = None,
     ) -> Tuple[List[float], StepDecisionRecord]:
         hour = float(observations.get("hour", 0.0))
         day_type = int(round(float(observations.get("day_type", 1.0))))
@@ -168,6 +169,7 @@ class PlanningModule:
             observations=observations,
             action_specs=action_specs,
             recent_decisions=recent_decisions,
+            telemetry_diagnostics=telemetry_diagnostics,
         )
 
         raw_text = ""

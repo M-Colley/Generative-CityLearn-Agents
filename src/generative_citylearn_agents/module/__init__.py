@@ -3,6 +3,7 @@ from generative_citylearn_agents.module.action import (
     CityLearnAdapter,
     GenerativeBuildingAgent,
     LLMAgent,
+    MultiCommunityLLMAdapter,
 )
 from generative_citylearn_agents.module.planning import PlanningModule
 from generative_citylearn_agents.module.profile import BuildingSeedGenerator, ProfileModule
@@ -13,6 +14,7 @@ __all__ = [
     "CityLearnAdapter",
     "GenerativeBuildingAgent",
     "LLMAgent",
+    "MultiCommunityLLMAdapter",
     "PlanningModule",
     "ProfileModule",
 ]

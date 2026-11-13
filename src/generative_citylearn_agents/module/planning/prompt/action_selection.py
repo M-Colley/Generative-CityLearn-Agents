@@ -16,6 +16,7 @@ def get_action_selection_prompt(
     observations: Mapping[str, float],
     action_specs: Sequence[Mapping[str, Any]],
     recent_decisions: Optional[Sequence[StepDecisionRecord]] = None,
+    telemetry_diagnostics: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """Build Stage-3 step-level control decision prompt modeled after GTA's ``PlanningModule``."""
     history_tail: List[Dict[str, Any]] = []
@@ -28,7 +29,7 @@ def get_action_selection_prompt(
             }
         )
 
-    context = {
+    context: Dict[str, Any] = {
         "prompt_stage": "action_selection",
         "building_name": profile.building_name,
         "time_step": int(time_step),
@@ -47,6 +48,8 @@ def get_action_selection_prompt(
         "action_specs": [dict(spec) for spec in action_specs],
         "recent_decisions": history_tail,
     }
+    if telemetry_diagnostics:
+        context["telemetry_diagnostics"] = dict(telemetry_diagnostics)
 
     return (
         f"Select continuous control actions for building '{profile.building_name}' "
@@ -55,12 +58,16 @@ def get_action_selection_prompt(
         "- Storage actions (`electrical_storage`, `cooling_storage`, `heating_storage`, `dhw_storage`): "
         "fraction of storage capacity charged (>0) or discharged (<0) in this step, bounded by `[low, high]`.\n"
         "- EV charger actions (`electric_vehicle_storage_<id>`): fraction of charger power (>0 charges, "
-        "<0 V2G discharge when supported). Note `min_effective_action`: positive values strictly below "
-        "`min_effective_action` fall inside the hardware deadband and deliver 0 kW, so use `0.0` or "
-        "`>= min_effective_action`.\n"
-        "- Deferrable appliances (`deferrable_appliance_<idx>`): `>= 0.5` starts a cycle if pending.\n"
+        "<0 V2G discharge when supported). Respect `min_effective_action` (and `min_effective_discharge_action` "
+        "for V2G): magnitudes strictly inside the hardware deadband deliver 0 kW, so use `0.0` or exceed the deadband.\n"
+        "- Deferrable appliances (`deferrable_appliance_<idx>`): CityLearn uses a STRICT inequality "
+        "`action > trigger_threshold_strict` (default `> 0.5`; sending `0.5` is a silent no-op). "
+        "Send `1.0` (`recommended_start_action`) to start a pending cycle or `0.0` to defer.\n"
+        "- Escalators (`escalator_<idx>`): `[0.0, 0.333)` = standby, `[0.333, 0.667)` = slow, `[0.667, 1.0]` = normal.\n"
         "- HVAC device actions (`cooling_device`, `heating_device`, `cooling_or_heating_device`): "
-        "fraction of nominal device power.\n\n"
+        "fraction of nominal device power.\n"
+        "- If `telemetry_diagnostics` lists `faulted_sensors` or `execution_feedback` clip reasons "
+        "(e.g. `phase_headroom`, `building_headroom`, `outage`), adapt conservatively.\n\n"
         f"{format_context_block(context)}\n\n"
         "Return a JSON object containing one entry per item in `action_specs`:\n"
         "{\n"

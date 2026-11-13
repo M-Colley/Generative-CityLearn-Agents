@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from generative_citylearn_agents.llm.base_chat_api import BaseChatAPI
@@ -35,6 +36,7 @@ class HuggingfaceChatAPI(BaseChatAPI):
         self.device_map = device_map
         self.torch_dtype = torch_dtype
         self._pipeline = pipeline_instance
+        self._infer_lock = threading.Lock()
 
     def _ensure_pipeline(self) -> Any:
         if self._pipeline is not None:
@@ -85,7 +87,6 @@ class HuggingfaceChatAPI(BaseChatAPI):
         return str(item)
 
     def get_completion(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        pipe = self._ensure_pipeline()
         messages = self._build_messages(prompt, system_prompt=system_prompt)
         gen_kwargs: Dict[str, Any] = {
             "max_new_tokens": self.n_predict,
@@ -94,13 +95,15 @@ class HuggingfaceChatAPI(BaseChatAPI):
         if self.do_sample and self.temperature > 0.0:
             gen_kwargs["temperature"] = self.temperature
 
-        try:
-            import torch
+        with self._infer_lock:
+            pipe = self._ensure_pipeline()
+            try:
+                import torch
 
-            with torch.inference_mode():
+                with torch.inference_mode():
+                    raw_out = pipe(messages, **gen_kwargs)
+            except ImportError:
                 raw_out = pipe(messages, **gen_kwargs)
-        except ImportError:
-            raw_out = pipe(messages, **gen_kwargs)
         return self._extract_generated_content(raw_out)
 
     def get_completions(
@@ -110,7 +113,6 @@ class HuggingfaceChatAPI(BaseChatAPI):
     ) -> List[str]:
         if len(prompts) == 0:
             return []
-        pipe = self._ensure_pipeline()
         batch_messages = [self._build_messages(p, system_prompt=system_prompt) for p in prompts]
         gen_kwargs: Dict[str, Any] = {
             "max_new_tokens": self.n_predict,
@@ -119,20 +121,24 @@ class HuggingfaceChatAPI(BaseChatAPI):
         if self.do_sample and self.temperature > 0.0:
             gen_kwargs["temperature"] = self.temperature
 
-        try:
-            import torch
+        with self._infer_lock:
+            pipe = self._ensure_pipeline()
+            try:
+                import torch
 
-            with torch.inference_mode():
+                with torch.inference_mode():
+                    outputs = pipe(batch_messages, **gen_kwargs)
+            except ImportError:
                 outputs = pipe(batch_messages, **gen_kwargs)
-        except ImportError:
-            outputs = pipe(batch_messages, **gen_kwargs)
         return [self._extract_generated_content(out) for out in outputs]
 
     def __getstate__(self) -> Dict[str, Any]:
         state = dict(self.__dict__)
         state["_pipeline"] = None
+        state.pop("_infer_lock", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._pipeline = None
+        self._infer_lock = threading.Lock()

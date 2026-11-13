@@ -113,10 +113,29 @@ terminated = truncated = False
 while not (terminated or truncated):
     actions = agent.predict(observations)
     observations, rewards, terminated, truncated, info = env.step(actions)
+    agent.observe_transition(info=info, rewards=rewards)  # feeds step clipping & topology diagnostics
 
 print(agent.storage.summarize_decisions())
 print(env.evaluate_v2().head())
 env.close()
+```
+
+### 2b. Synchronized Multi-Community Portfolios (`MultiCommunityLLMAdapter`)
+
+```python
+from generative_citylearn_agents import MultiCommunityLLMAdapter
+
+mc = MultiCommunityLLMAdapter(
+    [
+        {"community_id": "north", "schema": "citylearn_challenge_2022_phase_all_plus_evs", "env_kwargs": {"buildings": ["Building_1"]}},
+        {"community_id": "south", "schema": "citylearn_challenge_2022_phase_all_plus_evs", "env_kwargs": {"buildings": ["Building_2"]}},
+    ],
+    backend="mock",
+    workers=2,
+)
+obs, _ = mc.reset(seed=0)
+obs, rewards, terminated, truncated, info = mc.step(mc.predict(obs))
+mc.close()
 ```
 
 ### 3. Use in CityLearn `schema.json` / CLI

@@ -12,11 +12,13 @@ from citylearn.citylearn import CityLearnEnv
 import pytest
 
 from generative_citylearn_agents import (
+    ActionModule,
     BuildingSeedGenerator,
     CallableChatAPI,
     GenerativeBuildingAgent,
     HuggingfaceChatAPI,
     LLMAgent,
+    MultiCommunityLLMAdapter,
     OpenAICompatibleChatAPI,
     PlanningModule,
     ProfileModule,
@@ -314,3 +316,111 @@ class TestSimulacraAndEval:
                 assert (tmp_path / "schema_loaded" / "3_decisions.json").is_file()
             finally:
                 env2.close()
+
+
+class TestLLMBlockerMitigations:
+    def test_sentinel_decoding_strips_faults_and_negative_ev_sentinels(self):
+        raw = {
+            "hour": 14.0,
+            "indoor_dry_bulb_temperature": -9999.0,
+            "outdoor_dry_bulb_temperature": 26.5,
+            "electric_vehicle_charger_c1_connected_state": 0.0,
+            "electric_vehicle_charger_c1_soc": -0.1,
+            "electric_vehicle_charger_c1_estimated_departure_time": -1.0,
+        }
+        cleaned, diag = ActionModule.sanitize_telemetry_for_prompt(raw)
+        assert "indoor_dry_bulb_temperature" not in cleaned
+        assert "electric_vehicle_charger_c1_soc" not in cleaned
+        assert cleaned["electric_vehicle_charger_c1_connected_state"] == 0.0
+        assert diag["faulted_sensors"] == ["indoor_dry_bulb_temperature"]
+        assert diag["disconnected_ev_chargers"] == ["c1"]
+
+    def test_parallel_step_prediction_execution_feedback_and_pickle(self):
+        dataset = _resolve_dataset("citylearn_challenge_2022_phase_all_plus_evs")
+        env = CityLearnEnv(
+            dataset,
+            buildings=["Building_1", "Building_2", "Building_3"],
+            episode_time_steps=4,
+            render_mode="none",
+        )
+        seen_prompts = []
+        mock_api = RuleGuidedMockChatAPI()
+
+        def spy_fn(prompt: str, sys_prompt: str) -> str:
+            seen_prompts.append(prompt)
+            return mock_api.get_completion(prompt, system_prompt=sys_prompt)
+
+        try:
+            agent = LLMAgent(env, llm_client=spy_fn, workers=3)
+            assert agent.comparison_identity()["observation_access"] == "agent_payload"
+            obs, _ = env.reset(seed=0)
+            first_actions = agent.predict(obs)
+            assert len(first_actions) == 3
+
+            agent.observe_transition(
+                info={
+                    "entity_action_execution": {
+                        "charger": {
+                            "Building_1/c1": {
+                                "requested_power_kw": 7.2,
+                                "limited_power_kw": 3.6,
+                                "clip_reasons": ["phase_headroom"],
+                            }
+                        }
+                    }
+                }
+            )
+            obs, _, _, _, _ = env.step(first_actions)
+            second_actions = agent.predict(obs)
+            assert len(second_actions) == 3
+            assert any("execution_feedback" in p and "phase_headroom" in p for p in seen_prompts)
+
+            # Verify pickle safety even with non-pickleable local closure spy_fn
+            unpickled = pickle.loads(pickle.dumps(agent))
+            assert isinstance(unpickled, LLMAgent)
+        finally:
+            env.close()
+
+    def test_multi_community_llm_adapter_rollout_and_portfolio_kpis(self, tmp_path: Path):
+        dataset = _resolve_dataset("citylearn_challenge_2022_phase_all_plus_evs")
+        communities = [
+            {
+                "id": "north_comm",
+                "schema": dataset,
+                "env_kwargs": {
+                    "buildings": ["Building_1"],
+                    "episode_time_steps": 4,
+                    "render_mode": "none",
+                },
+            },
+            {
+                "id": "south_comm",
+                "schema": dataset,
+                "env_kwargs": {
+                    "buildings": ["Building_2"],
+                    "episode_time_steps": 4,
+                    "render_mode": "none",
+                },
+            },
+        ]
+        mc = MultiCommunityLLMAdapter(
+            communities,
+            backend="mock",
+            workers=2,
+            storage_root=tmp_path / "mc_logs",
+        )
+        try:
+            obs_map, _ = mc.reset(seed=0)
+            assert mc.community_ids == ["north_comm", "south_comm"]
+            done = False
+            while not done:
+                act_map = mc.predict(obs_map)
+                assert set(act_map.keys()) == {"north_comm", "south_comm"}
+                obs_map, _, term, trunc, _ = mc.step(act_map)
+                done = bool(term or trunc)
+            kpis = mc.evaluate_kpis()
+            assert not kpis.empty
+            assert "__portfolio__" in set(kpis["community_id"])
+        finally:
+            mc.close()
+

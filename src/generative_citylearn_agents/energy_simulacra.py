@@ -61,7 +61,7 @@ def run_energy_simulacra(config: Optional[Mapping[str, Any]] = None) -> Dict[str
         terminated = truncated = False
         while not (terminated or truncated):
             actions = agent.predict(observations)
-            observations, _, terminated, truncated, _ = adapter.step(actions)
+            observations, _, terminated, truncated, _ = adapter.step(actions, agent=agent)
 
         log_info(
             f"[DAY_SCHEDULE] {len(agent.storage.day_schedules)} daily schedules generated "

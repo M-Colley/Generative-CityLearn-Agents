@@ -3,6 +3,7 @@ from generative_citylearn_agents.module.action.citylearn_adapter import (
     CityLearnAdapter,
     GenerativeBuildingAgent,
     LLMAgent,
+    MultiCommunityLLMAdapter,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "CityLearnAdapter",
     "GenerativeBuildingAgent",
     "LLMAgent",
+    "MultiCommunityLLMAdapter",
 ]

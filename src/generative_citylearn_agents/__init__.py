@@ -4,12 +4,6 @@ from generative_citylearn_agents.config import (
     config_phase_all_evs,
     get_default_config,
 )
-def run_energy_simulacra(config=None):
-    from generative_citylearn_agents.energy_simulacra import (
-        run_energy_simulacra as _run,
-    )
-
-    return _run(config)
 from generative_citylearn_agents.eval import (
     build_comparison_table,
     evaluate_qualitative_artifacts,
@@ -36,6 +30,7 @@ from generative_citylearn_agents.module import (
     CityLearnAdapter,
     GenerativeBuildingAgent,
     LLMAgent,
+    MultiCommunityLLMAdapter,
     PlanningModule,
     ProfileModule,
 )
@@ -48,6 +43,15 @@ from generative_citylearn_agents.util import (
 )
 
 __version__ = "0.1.0"
+
+
+def run_energy_simulacra(config=None):
+    from generative_citylearn_agents.energy_simulacra import (
+        run_energy_simulacra as _run,
+    )
+
+    return _run(config)
+
 
 __all__ = [
     "ActionDecision",
@@ -64,6 +68,7 @@ __all__ = [
     "GenerativeBuildingAgentState",
     "HuggingfaceChatAPI",
     "LLMAgent",
+    "MultiCommunityLLMAdapter",
     "OpenAICompatibleChatAPI",
     "PlanningModule",
     "ProfileModule",

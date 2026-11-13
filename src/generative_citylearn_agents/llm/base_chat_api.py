@@ -4,7 +4,8 @@ import abc
 import inspect
 import json
 import math
-from typing import Any, Callable, List, Mapping, Optional, Sequence
+import pickle
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are an expert generative building energy management agent operating in a "
@@ -77,7 +78,17 @@ class CallableChatAPI(BaseChatAPI):
             self._accepts_system = False
 
     def get_completion(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        if self._fn is None:
+            raise RuntimeError("CallableChatAPI callable was not pickleable and must be re-attached after unpickling.")
         active_system = self.system_prompt if system_prompt is None else str(system_prompt)
         if self._accepts_system:
             return str(self._fn(prompt, active_system))
         return str(self._fn(prompt))
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = dict(self.__dict__)
+        try:
+            pickle.dumps(self._fn)
+        except Exception:
+            state["_fn"] = None
+        return state
